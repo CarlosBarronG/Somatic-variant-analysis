@@ -1,0 +1,27 @@
+STAR --runThreadN 4 --runMode genomeGenerate --genomeSAindexNbases 12 --genomeDir STAR/ --genomeFastaFiles Homo_sapiens.GRCh38.dna.primary_assembly.fa --sjdbOverhang 99 --sjdbGTFfile Homo_sapiens.GRCh38.99.gtf --limitGenomeGenerateRAM 15000000000 --genomeSAsparseD 3 --limitIObufferSize 50000000 --limitSjdbInsertNsj 383200
+STAR --runThreadN 4 --genomeDir STAR_GENOME/ --readFilesIn ../../4T/Secuenciacion_Carlos/MUESTRAS_FILTRADAS/11R_1.fastq ../../4T/Secuenciacion_Carlos/MUESTRAS_FILTRADAS/11R_2.fastq --outSAMtype BAM SortedByCoordinate 
+gatk MarkDuplicates -I ALINEACION_STAR/11R/Aligned.sortedByCoord.out.bam -M ALINEACION_STAR/11R_METRICS.txt -O ALINEACION_STAR/11R_MARKDUPLICATES.bam
+samtools faidx Homo_sapiens_GRCh38_dna_primary_assembly.fasta -o Homo_sapiens_GRCh38_dna_primary_assembly.fasta.fai
+samtools dict Homo_sapiens_GRCh38_dna_primary_assembly.fasta -o Homo_sapiens_GRCh38_dna_primary_assembly.dict
+gatk SplitNCigarReads -I MARKDUPLICATES/11R/11R_MARKDUPLICATES.bam -O 11R_SPLITNCIGAR.bam -R Homo_sapiens_GRCh38_dna_primary_assembly.fasta
+gatk AddOrReplaceReadGroups -I 11R_SPLITNCIGAR.bam -O 11R_SPLITNCIGAR_addgroup.bam -ID 4 -LB lib1 -PL ILLUMINA -PU unit1 -SM 20
+gatk IndexFeatureFile -I GRCh38/1000GENOMES-phase_3.vcf 
+gatk BaseRecalibrator -R GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta -I 11R_SPLITNCIGAR_addgroup.bam --known-sites GRCh38/1000GENOMES-phase_3.vcf --use-original-qualities -O 11R_BR
+gatk ApplyBQSR -R GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta -I 11R_SPLITNCIGAR_addgroup.bam --use-original-qualities -O 11R_ApplyBQSR.bam --bqsr-recal-file 11R_BR
+gatk HaplotypeCaller -R GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta -I 11R_ApplyBQSR.bam -O 11R.vcf.gz -dont-use-soft-clipped-bases --standard-min-confidence-threshold-for-calling 20 -dbsnp GRCh38/1000GENOMES-phase_3.vcf 
+
+
+STAR --runThreadN 4 --genomeDir STAR_GENOME/ --readFilesIn ../../4T/Secuenciacion_Carlos/MUESTRAS_FILTRADAS/9S/9S_1.fastq ../../4T/Secuenciacion_Carlos/MUESTRAS_FILTRADAS/9S/9S_2.fastq --outSAMtype BAM SortedByCoordinate --outFileNamePrefix ALINEACION_STAR/9S/
+
+
+for a in *; do gatk MarkDuplicates -I "$a"/Aligned.sortedByCoord.out.bam -M ../METRICS/"$a"/"$a"_METRICS.txt -O ../MARKDUPLICATES/"$a"/"$a".bam; done
+cd ../MARKDUPLICATES
+for a in *; do gatk SplitNCigarReads -I "$a"/"$a".bam -O ../SPLITNCIGAR/"$a"/"$a".bam -R ../GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta; done
+cd ../SPLITNCIGAR
+for a in *; do gatk AddOrReplaceReadGroups -I "$a"/"$a".bam -O ../ADDORREPLACE/"$a"/"$a"_addgroup.bam -ID 4 -LB lib1 -PL ILLUMINA -PU unit1 -SM 20
+cd ../ADDORREPLACE
+for a in *; do gatk BaseRecalibrator -R ../GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta -I "$a"/"$a"_addgroup.bam --known-sites ../GRCh38/1000GENOMES-phase_3.vcf --use-original-qualities -O ../BASERECALIBRATOR/"$a"/"$a"_BR
+cd ../BASERECALIBRATOR
+for a in *; do gatk ApplyBQSR -R ../GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta -I ../ADDORREPLACE/"$a"/"$a"_addgroup.bam --use-original-qualities -O ../APPLYBQSR/"$a"/"$a"_ApplyBQSR.bam --bqsr-recal-file "$a"/"$a"_BR
+cd ../APPLYBQSR
+for a in *;do gatk HaplotypeCaller -R ../GRCh38/Homo_sapiens_GRCh38_dna_primary_assembly.fasta -I "$a"/"$a"_ApplyBQSR.bam -O ../HAPLOTYPECALLER/"$a"/"$a".vcf.gz -dont-use-soft-clipped-bases --standard-min-confidence-threshold-for-calling 20 -dbsnp ../GRCh38/1000GENOMES-phase_3.vcf
