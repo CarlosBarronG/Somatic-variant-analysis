@@ -1,0 +1,104 @@
+library("tidyverse")
+library("vcfR")
+sample_info <- data.frame("Sample"=c(2,
+                                     3,
+                                     5,
+                                     6,
+                                     7,
+                                     8,
+                                     9,
+                                     11,
+                                     12,
+                                     20,
+                                     21,
+                                     22,
+                                     24,
+                                     25,
+                                     27,
+                                     28,
+                                     30,
+                                     32,
+                                     39,
+                                     40,
+                                     41,
+                                     42,
+                                     44),
+                          "Respuesta"=c("Resistente",
+                                        "Resistente",
+                                        "Resistente",
+                                        "Resistente",
+                                        "Sensible",
+                                        "Resistente",
+                                        "Sensible",
+                                        "Resistente",
+                                        "Resistente",
+                                        "Sensible",
+                                        "Sensible",
+                                        "Resistente",
+                                        "Sensible",
+                                        "Resistente",
+                                        "Resistente",
+                                        "Resistente",
+                                        "Sensible",
+                                        "Sensible",
+                                        "Sensible",
+                                        "Resistente",
+                                        "Sensible",
+                                        "NA",
+                                        "Resistente"))
+
+
+
+vcf <- read.vcfR("Documents/Mutaciones/Variantes/20.vcf")
+vcf_df <- as.data.frame(getFIX(vcf))
+vcf_df$sample <- "20"
+vcf_df$QD <- extract.gt(vcf, element = "GQ")[,1]
+vcf_df$Respuesta <- sample_info$Respuesta[sample_info$Sample==20]
+vcf_filtered <- filter(vcf_df, QD>90&QUAL>20)
+
+
+dataFiles <- lapply(Sys.glob("Documents/Mutaciones/Variantes/*.vcf"),read.vcfR)
+dataFiles
+
+setwd("Documents/Mutaciones/Variantes/")
+datafiles <- list.files(pattern = ".vcf")
+str_remove(datafiles,".vcf")
+
+
+
+vcffiles <- data.frame()
+for (a in datafiles) {
+  vcf <- read.vcfR(a)
+  vcf_df <- as.data.frame(getFIX(vcf))
+  vcf_df$Sample <- as.numeric(str_remove(a,".vcf"))
+  vcf_df$QD <- extract.gt(vcf, element = "GQ")[,1]
+  vcf_df$Respuesta <- sample_info$Respuesta[sample_info$Sample==as.numeric(str_remove(a,".vcf"))]
+  vcf_filtered <- filter(vcf_df, QD>90&QUAL>20)
+  vcffiles <- rbind(vcffiles,vcf_df)
+}
+
+table(vcffiles$Respuesta)
+
+mutaciones_filtradas <- vcffiles%>%
+  filter(Respuesta=="Resistente"|Respuesta=="Sensible")%>%
+  group_by(Respuesta,CHROM,POS,REF,ALT)%>%
+  summarise(Count= n())%>%
+  arrange(desc(Count))%>%
+  filter(Count>3)
+
+Mutaciones_en_ambos_grupos <- as.data.frame(table(mutaciones_filtradas$POS))
+#La siguiente filtracion nos asegura que la mutacion solo esté en uno de los dos grupos, ya que si tuviera freq==2 estariamos dejando mutaciones que aparecen tanto en sensibilidad como en resistencia
+Mutaciones_por_respuesta <- filter(Mutaciones_en_ambos_grupos,Freq==1)
+Mutaciones_filtradas_por_respuesta <- filter(mutaciones_filtradas, POS %in% Mutaciones_por_respuesta$Var1)
+
+#Filtramos para seleccionar solo las variables que aparecen en los 13 sujetos resistentes y las que aparecen en los 8 sujetos sensibles
+Mutaciones_con_altas_prevalencias <- filter(Mutaciones_filtradas_por_respuesta,Count==8&Respuesta=="Sensible"|Count==13&Respuesta=="Resistente")
+
+#filtramos mutaciones que aparezcan en mas del 80% de los resistentes y mas del 80% de sensibles
+
+Mutaciones_90_porciento <-filter(Mutaciones_filtradas_por_respuesta,Count>6&Respuesta=="Sensible"|Count>11&Respuesta=="Resistente")
+ 
+Mutaciones_80_porciento <-filter(Mutaciones_filtradas_por_respuesta,Count>5&Respuesta=="Sensible"|Count>9&Respuesta=="Resistente")
+
+write.csv(Mutaciones_con_altas_prevalencias,"../Mutaciones_De_respuesta")
+write.csv(Mutaciones_90_porciento,"../Mutaciones_90_porciento")
